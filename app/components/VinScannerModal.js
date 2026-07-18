@@ -18,15 +18,30 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
 
   useEffect(() => {
     const hints = new Map();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_39, BarcodeFormat.DATA_MATRIX]);
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.DATA_MATRIX,
+    ]);
     const codeReader = new BrowserMultiFormatReader(hints);
 
     codeReader
-      .decodeFromConstraints({ video: { facingMode: "environment" } }, videoRef.current, (result) => {
-        if (result) {
-          handleDetectedCode(result.getText());
+      .decodeFromConstraints(
+        {
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: "continuous" }],
+          },
+        },
+        videoRef.current,
+        (result) => {
+          if (result) {
+            handleDetectedCode(result.getText());
+          }
         }
-      })
+      )
       .then(() => setStatus("Scanning..."))
       .catch((err) => {
         console.error("Camera error:", err);
