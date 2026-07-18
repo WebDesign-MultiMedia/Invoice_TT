@@ -187,6 +187,15 @@ export async function processReceiptAndNotify(receiptData) {
     const id = `RCT-${Date.now()}`;
     const dateCreated = new Date().toISOString();
 
+    const missingCoreVars = ["SHEETDB_API_URL", "RESEND_API_KEY"].filter(
+      (key) => !process.env[key]
+    );
+    if (missingCoreVars.length > 0) {
+      throw new Error(
+        `Missing required environment variable(s) on this deployment: ${missingCoreVars.join(", ")}`
+      );
+    }
+
     // --- Step A: Bookkeeping (SheetDB) ---
     // Logging is the source of truth for accounting, so a failure here halts
     // the entire flow before any customer communication is sent.
@@ -254,6 +263,18 @@ export async function processReceiptAndNotify(receiptData) {
     const SMS_ENABLED = true;
 
     if (SMS_ENABLED) {
+      const missingVars = [
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_PHONE_NUMBER",
+      ].filter((key) => !process.env[key]);
+
+      if (missingVars.length > 0) {
+        throw new Error(
+          `Missing required environment variable(s) on this deployment: ${missingVars.join(", ")}`
+        );
+      }
+
       const smsBody =
         `Receipt Confirmation: Your ${carDetails} is ready. Total Paid: $${totalAmount} ` +
         `via ${paymentMethod} for ${jobDetails}. Thank you for choosing our shop!`;
