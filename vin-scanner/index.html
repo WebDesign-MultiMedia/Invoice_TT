@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShopFlow VIN Scanner</title>
+<!--
+  CSP note: Tailwind's Play CDN and this single-file inline <script> require
+  'unsafe-inline'/'unsafe-eval' to run at all. This still restricts script
+  loading to only 'self' + the two trusted CDNs below, blocking any injected
+  third-party script tags. A hardened production build would compile Tailwind
+  ahead of time and externalize the JS with a nonce instead.
+-->
+<meta
+  http-equiv="Content-Security-Policy"
+  content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self' https://vpic.nhtsa.dot.gov; base-uri 'self';"
+/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3"></script>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center px-4 py-6">
+
+  <header class="w-full max-w-md mb-4">
+    <h1 class="text-xl font-bold tracking-tight text-zinc-100">ShopFlow VIN Scanner</h1>
+    <p class="text-sm text-zinc-400">Align the barcode within the target line</p>
+  </header>
+
+  <main class="w-full max-w-md flex flex-col gap-4">
+    <!-- Scanner viewport -->
+    <div class="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border border-zinc-800 shadow-lg">
+      <video id="scanner-video" class="w-full h-full object-cover" muted playsinline></video>
+
+      <!-- Target laser line overlay -->
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div class="w-[85%] h-0.5 bg-red-500 shadow-[0_0_8px_2px_rgba(239,68,68,0.8)] animate-pulse"></div>
+      </div>
+
+      <!-- Corner frame -->
+      <div class="pointer-events-none absolute inset-6 border-2 border-zinc-100/20 rounded-lg"></div>
+
+      <div id="scanner-status" class="absolute bottom-2 left-2 right-2 text-center text-xs text-zinc-300 bg-black/50 rounded px-2 py-1">
+        Requesting camera access…
+      </div>
+
+      <!-- Camera permission denied overlay -->
+      <div
+        id="camera-denied"
+        class="hidden absolute inset-0 flex-col items-center justify-center gap-3 bg-zinc-950/95 px-6 text-center opacity-0 translate-y-2 transition-all duration-300"
+      >
+        <div class="text-3xl">📷</div>
+        <h2 class="text-base font-semibold text-zinc-100">Camera Access Needed</h2>
+        <p id="camera-denied-steps" class="text-sm leading-relaxed text-zinc-400"></p>
+        <button
+          id="camera-retry-btn"
+          class="mt-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 active:bg-red-800"
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+
+    <!-- Vehicle lookup card -->
+    <div id="vin-lookup-card" class="hidden rounded-xl bg-zinc-900 border border-zinc-700 p-4 opacity-0 translate-y-2 transition-all duration-300">
+      <div id="vin-loading" class="hidden items-center justify-center gap-2 py-4 text-sm text-zinc-400">
+        <svg class="h-5 w-5 animate-spin text-red-500" viewBox="0 0 24 24" fill="none">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+        </svg>
+        Decoding VIN…
+      </div>
+
+      <div id="vin-error" class="hidden text-sm text-red-400"></div>
+
+      <div id="vin-details" class="hidden">
+        <p class="mb-3 text-xs uppercase tracking-wide text-zinc-500">Vehicle Details</p>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <p class="text-xs text-zinc-500">Year</p>
+            <p id="vin-year" class="text-lg font-semibold text-zinc-100"></p>
+          </div>
+          <div>
+            <p class="text-xs text-zinc-500">Make</p>
+            <p id="vin-make" class="text-lg font-semibold text-zinc-100"></p>
+          </div>
+          <div>
+            <p class="text-xs text-zinc-500">Model</p>
+            <p id="vin-model" class="text-lg font-semibold text-zinc-100"></p>
+          </div>
+          <div>
+            <p class="text-xs text-zinc-500">Engine</p>
+            <p id="vin-engine" class="text-lg font-semibold text-zinc-100"></p>
+          </div>
+          <div class="col-span-2">
+            <p class="text-xs text-zinc-500">Drive Type</p>
+            <p id="vin-drive" class="text-lg font-semibold text-zinc-100"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual fallback -->
+    <div class="flex flex-col gap-2">
+      <label for="manual-vin" class="text-sm font-medium text-zinc-300">Or enter VIN manually</label>
+      <div class="flex gap-2">
+        <input
+          id="manual-vin"
+          type="text"
+          placeholder="e.g. 1HGCM82633A004352"
+          maxlength="17"
+          autocapitalize="characters"
+          class="flex-1 rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+        />
+        <button
+          id="manual-scan-btn"
+          class="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 active:bg-red-800 transition"
+        >
+          Scan
+        </button>
+      </div>
+    </div>
+
+    <div id="result-box" class="hidden rounded-lg bg-zinc-900 border border-zinc-700 px-4 py-3 opacity-0 translate-y-2 transition-all duration-300">
+      <p class="text-xs text-zinc-400 mb-1">Last detected code</p>
+      <p id="result-text" class="text-base font-mono font-semibold text-red-400 break-all"></p>
+    </div>
+  </main>
+
+  <footer class="mt-6 text-center text-xs text-zinc-600">
+    Secure Client Demo Mode | Powered by NHTSA Data
+  </footer>
+
+  <script>
+    const videoEl = document.getElementById("scanner-video");
+    const statusEl = document.getElementById("scanner-status");
+    const manualInput = document.getElementById("manual-vin");
+    const manualBtn = document.getElementById("manual-scan-btn");
+    const resultBox = document.getElementById("result-box");
+    const resultText = document.getElementById("result-text");
+
+    const vinCard = document.getElementById("vin-lookup-card");
+    const vinLoading = document.getElementById("vin-loading");
+    const vinError = document.getElementById("vin-error");
+    const vinDetails = document.getElementById("vin-details");
+    const vinYear = document.getElementById("vin-year");
+    const vinMake = document.getElementById("vin-make");
+    const vinModel = document.getElementById("vin-model");
+    const vinEngine = document.getElementById("vin-engine");
+    const vinDrive = document.getElementById("vin-drive");
+
+    const cameraDeniedEl = document.getElementById("camera-denied");
+    const cameraDeniedSteps = document.getElementById("camera-denied-steps");
+    const cameraRetryBtn = document.getElementById("camera-retry-btn");
+
+    // Removes "hidden" then animates opacity/translate on the next frame,
+    // since display:none can't be transitioned directly. Pass useFlex for
+    // elements whose visible layout is display:flex (e.g. centered overlays)
+    // rather than the default block.
+    function revealElement(el, useFlex = false) {
+      el.classList.remove("hidden");
+      if (useFlex) el.classList.add("flex");
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          el.classList.remove("opacity-0", "translate-y-2");
+        });
+      });
+    }
+
+    function hideElement(el, useFlex = false) {
+      el.classList.add("hidden", "opacity-0", "translate-y-2");
+      if (useFlex) el.classList.remove("flex");
+    }
+
+    function getCameraInstructions() {
+      const ua = navigator.userAgent;
+      const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+      const isAndroid = /Android/.test(ua);
+
+      if (isIOS) {
+        return 'On iPhone/iPad: open Settings → Safari → Camera → set to "Allow." Or tap the "AA" icon in the address bar → Website Settings → Camera → Allow. Then reload this page.';
+      }
+      if (isAndroid) {
+        return "On Android Chrome: tap the lock or info icon next to the address bar → Permissions → Camera → Allow. Then reload this page.";
+      }
+      return "Please enable camera permissions for this site in your browser's settings, then reload this page.";
+    }
+
+    function showCameraDenied() {
+      cameraDeniedSteps.textContent = getCameraInstructions();
+      revealElement(cameraDeniedEl, true);
+      statusEl.textContent = "Camera access denied";
+    }
+
+    cameraRetryBtn.addEventListener("click", () => {
+      hideElement(cameraDeniedEl, true);
+      statusEl.textContent = "Requesting camera access…";
+      startCamera();
+    });
+
+    const { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } = ZXing;
+
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.DATA_MATRIX,
+    ]);
+
+    const codeReader = new BrowserMultiFormatReader(hints);
+
+    function handleDetectedCode(text) {
+      if (navigator.vibrate) {
+        navigator.vibrate(200);
+      }
+      resultText.textContent = text;
+      revealElement(resultBox);
+      alert(`VIN detected: ${text}`);
+
+      if (text.length === 17) {
+        decodeVin(text);
+      }
+    }
+
+    function getResultValue(results, variable) {
+      const entry = results.find((r) => r.Variable === variable);
+      const value = entry ? entry.Value : null;
+      return value && value.trim() !== "" ? value.trim() : null;
+    }
+
+    async function decodeVin(vin) {
+      revealElement(vinCard);
+      vinLoading.classList.remove("hidden");
+      vinLoading.classList.add("flex");
+      vinError.classList.add("hidden");
+      vinDetails.classList.add("hidden");
+
+      try {
+        const res = await fetch(
+          `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/${encodeURIComponent(vin)}?format=json`
+        );
+
+        if (!res.ok) {
+          throw new Error(`NHTSA API error (${res.status}). Please try again.`);
+        }
+
+        const data = await res.json();
+        const results = data.Results || [];
+
+        const errorCode = getResultValue(results, "Error Code");
+        if (errorCode && errorCode !== "0") {
+          const errorText = getResultValue(results, "Error Text");
+          throw new Error(errorText || "This VIN could not be decoded. Please check it and try again.");
+        }
+
+        const year = getResultValue(results, "Model Year");
+        const make = getResultValue(results, "Make");
+        const model = getResultValue(results, "Model");
+        const cylinders = getResultValue(results, "Engine Number of Cylinders");
+        const displacement = getResultValue(results, "Displacement (L)");
+        const driveType = getResultValue(results, "Drive Type");
+
+        if (!make || !model) {
+          throw new Error("No vehicle data found for this VIN.");
+        }
+
+        vinYear.textContent = year || "—";
+        vinMake.textContent = make || "—";
+        vinModel.textContent = model || "—";
+
+        const engineParts = [];
+        if (cylinders) engineParts.push(`${cylinders} Cyl`);
+        if (displacement) engineParts.push(`${displacement}L`);
+        vinEngine.textContent = engineParts.length ? engineParts.join(", ") : "—";
+
+        vinDrive.textContent = driveType || "—";
+
+        vinLoading.classList.add("hidden");
+        vinLoading.classList.remove("flex");
+        vinDetails.classList.remove("hidden");
+      } catch (err) {
+        console.error("VIN decode error:", err);
+        vinLoading.classList.add("hidden");
+        vinLoading.classList.remove("flex");
+        vinError.textContent =
+          err.message || "Unable to decode this VIN. Please check the code and try again.";
+        vinError.classList.remove("hidden");
+      }
+    }
+
+    async function startCamera() {
+      try {
+        await codeReader.decodeFromConstraints(
+          { video: { facingMode: "environment" } },
+          videoEl,
+          (result, err) => {
+            if (result) {
+              handleDetectedCode(result.getText());
+            }
+          }
+        );
+        statusEl.textContent = "Scanning…";
+      } catch (err) {
+        console.error("Camera error:", err);
+        if (err && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
+          showCameraDenied();
+        } else if (err && err.name === "NotFoundError") {
+          statusEl.textContent = "No camera found — use manual entry below";
+        } else {
+          statusEl.textContent = "Camera unavailable — use manual entry below";
+        }
+      }
+    }
+
+    manualBtn.addEventListener("click", () => {
+      const value = manualInput.value.trim();
+      if (!value) return;
+      handleDetectedCode(value);
+    });
+
+    startCamera();
+  </script>
+</body>
+</html>

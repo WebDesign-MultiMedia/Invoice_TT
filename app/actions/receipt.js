@@ -1,8 +1,51 @@
 "use server";
 
+function detailRow(label, value) {
+  if (!value) return "";
+  return `<tr>
+              <td colspan="2" style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px;">
+                <span style="color: #64748b;">${label}:</span> <strong>${value}</strong>
+              </td>
+            </tr>`;
+}
+
+function detailPairRow(label1, value1, label2, value2) {
+  if (!value1 && !value2) return "";
+  return `<tr>
+              <td style="padding: 6px 8px 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; width: 50%;">
+                <span style="color: #64748b;">${label1}:</span> ${value1 ? `<strong>${value1}</strong>` : ""}
+              </td>
+              <td style="padding: 6px 0 6px 8px; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; width: 50%;">
+                <span style="color: #64748b;">${label2}:</span> ${value2 ? `<strong>${value2}</strong>` : ""}
+              </td>
+            </tr>`;
+}
+
+function airbagSection(pairs) {
+  const items = pairs.filter(([, value]) => value);
+  if (items.length === 0) return "";
+  const listItems = items
+    .map(
+      ([label, value]) =>
+        `<li style="padding: 2px 0;"><span style="color: #64748b;">${label}:</span> ${value}</li>`
+    )
+    .join("");
+  return `<tr>
+              <td colspan="2" style="padding: 10px 0 0;">
+                <p style="margin: 0 0 4px; font-size: 12px; font-weight: 700; color: #0f172a;">Airbags</p>
+                <ul style="margin: 0; padding-left: 18px; color: #334155; font-size: 13px;">
+                  ${listItems}
+                </ul>
+              </td>
+            </tr>`;
+}
+
 function buildReceiptEmailHtml({
   clientName,
   carDetails,
+  vin,
+  vehicleDetails,
+  mileage,
   jobDetails,
   totalAmount,
   paymentMethod,
@@ -13,6 +56,31 @@ function buildReceiptEmailHtml({
     dateStyle: "medium",
     timeStyle: "short",
   });
+
+  const vd = vehicleDetails || {};
+  const plantLocation = [vd.plantCity, vd.plantState, vd.plantCountry].filter(Boolean).join(", ");
+
+  const specRows = [
+    detailRow("Manufacturer", vd.manufacturer),
+    detailRow("Vehicle Type", vd.vehicleType),
+    detailRow("Body Class", vd.bodyClass),
+    detailPairRow("Series", vd.series, "Trim", vd.trim),
+    detailPairRow("GVWR", vd.gvwr, "Drive Type", vd.driveType),
+    detailPairRow("Cylinders", vd.cylinders, "Primary Fuel Type", vd.primaryFuel),
+    detailPairRow("Electrification Level", vd.electrificationLevel, "Secondary Fuel Type", vd.secondaryFuel),
+    detailPairRow("Engine Model", vd.engineModel, "Engine Brake (HP)", vd.engineHp),
+    detailPairRow("Engine Manufacturer", vd.engineManufacturer, "Displacement (L)", vd.displacement),
+    detailPairRow("Transmission Speeds", vd.transmissionSpeeds, "Transmission Style", vd.transmissionStyle),
+    detailRow("Plant Location", plantLocation),
+    airbagSection([
+      ["Front", vd.airbagFront],
+      ["Knee", vd.airbagKnee],
+      ["Side", vd.airbagSide],
+      ["Curtain", vd.airbagCurtain],
+      ["Seat Cushion", vd.airbagSeatCushion],
+      ["Other Restraint Info", vd.otherRestraintInfo],
+    ]),
+  ].join("");
 
   return `
   <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f1f5f9; padding: 24px 0; margin: 0;">
@@ -39,6 +107,14 @@ function buildReceiptEmailHtml({
               <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; color: #64748b;">Vehicle</td>
               <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${carDetails}</td>
             </tr>
+            ${
+              mileage
+                ? `<tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; color: #64748b;">Mileage</td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${mileage}</td>
+            </tr>`
+                : ""
+            }
             <tr>
               <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; color: #64748b;">Service Performed</td>
               <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${jobDetails}</td>
@@ -55,9 +131,34 @@ function buildReceiptEmailHtml({
               <td style="padding: 12px 0 0; color: #0f172a; font-size: 16px; font-weight: 800;">Total Paid</td>
               <td style="padding: 12px 0 0; text-align: right; color: #16a34a; font-size: 20px; font-weight: 800;">$${totalAmount}</td>
             </tr>
+            ${
+              vin
+                ? `<tr>
+              <td colspan="2" style="padding: 10px 0 0; color: #94a3b8; font-size: 12px; text-align: center;">VIN: ${vin}</td>
+            </tr>`
+                : ""
+            }
           </table>
         </td>
       </tr>
+      ${
+        specRows
+          ? `<tr>
+        <td style="padding: 0 24px 24px;">
+          <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #f1f5f9; padding: 10px 16px;">
+              <p style="margin: 0; font-size: 12px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">Full Vehicle Specifications</p>
+            </div>
+            <div style="padding: 4px 16px 8px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                ${specRows}
+              </table>
+            </div>
+          </div>
+        </td>
+      </tr>`
+          : ""
+      }
       <tr>
         <td style="background-color: #f8fafc; padding: 16px 24px; text-align: center;">
           <p style="margin: 0; color: #94a3b8; font-size: 12px;">Thank you for choosing our shop. This receipt confirms your balance is fully paid.</p>
@@ -75,6 +176,9 @@ export async function processReceiptAndNotify(receiptData) {
       clientPhone,
       clientEmail,
       carDetails,
+      vin,
+      vehicleDetails,
+      mileage,
       jobDetails,
       totalAmount,
       paymentMethod,
@@ -97,6 +201,9 @@ export async function processReceiptAndNotify(receiptData) {
             clientPhone,
             clientEmail,
             carDetails,
+            vin: vin || "",
+            vehicleSpecifications: vehicleDetails ? JSON.stringify(vehicleDetails) : "",
+            mileage,
             jobDetails,
             totalAmount,
             paymentMethod,
@@ -126,6 +233,9 @@ export async function processReceiptAndNotify(receiptData) {
         html: buildReceiptEmailHtml({
           clientName,
           carDetails,
+          vin,
+          vehicleDetails,
+          mileage,
           jobDetails,
           totalAmount,
           paymentMethod,
@@ -141,9 +251,7 @@ export async function processReceiptAndNotify(receiptData) {
     }
 
     // --- Step C: SMS Dispatch (Twilio) ---
-    // Temporarily disabled while the Twilio sending number is being set up.
-    // Set to true once TWILIO_PHONE_NUMBER is a verified, owned number.
-    const SMS_ENABLED = false;
+    const SMS_ENABLED = true;
 
     if (SMS_ENABLED) {
       const smsBody =
