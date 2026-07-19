@@ -320,6 +320,20 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
 
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded bg-black">
           <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+
+          {/* Barcode alignment guide - helps position/size the barcode for a better scan */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="relative h-[26%] w-[88%] rounded-md border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+              <span className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
+                Fill this box with the barcode
+              </span>
+              {/* Corner accents */}
+              <div className="absolute -left-0.5 -top-0.5 h-3 w-3 border-l-2 border-t-2 border-white" />
+              <div className="absolute -right-0.5 -top-0.5 h-3 w-3 border-r-2 border-t-2 border-white" />
+              <div className="absolute -bottom-0.5 -left-0.5 h-3 w-3 border-b-2 border-l-2 border-white" />
+              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 border-b-2 border-r-2 border-white" />
+            </div>
+          </div>
         </div>
         <p className="mt-2 text-xs text-slate-500">{status}</p>
 
