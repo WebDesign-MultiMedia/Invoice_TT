@@ -191,8 +191,21 @@ function installCroppedFrameCapture(codeReader) {
   };
 }
 
+function createVinDecodeHints() {
+  const hints = new Map();
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+    BarcodeFormat.CODE_39,
+    BarcodeFormat.CODE_128,
+    BarcodeFormat.DATA_MATRIX,
+    BarcodeFormat.PDF_417,
+  ]);
+  hints.set(DecodeHintType.TRY_HARDER, true);
+  return hints;
+}
+
 export default function VinScannerModal({ onVehicleFound, onClose }) {
   const videoRef = useRef(null);
+  const photoInputRef = useRef(null);
   const scannerControlsRef = useRef(null); // holds the active BrowserMultiFormatReader instance
   const isProcessingRef = useRef(false); // guards against duplicate decode calls from rapid frames
   const lastScannedVinRef = useRef(null); // last VIN already sent to decodeVin, from camera scanning
@@ -201,21 +214,13 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
   const [manualVin, setManualVin] = useState("");
   const [status, setStatus] = useState("Requesting camera access...");
   const [isDecoding, setIsDecoding] = useState(false);
+  const [isReadingPhoto, setIsReadingPhoto] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     isMountedRef.current = true;
 
-    const hints = new Map();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.CODE_39,
-      BarcodeFormat.CODE_128,
-      BarcodeFormat.DATA_MATRIX,
-      BarcodeFormat.PDF_417,
-    ]);
-    hints.set(DecodeHintType.TRY_HARDER, true);
-
-    const codeReader = new BrowserMultiFormatReader(hints);
+    const codeReader = new BrowserMultiFormatReader(createVinDecodeHints());
     installCroppedFrameCapture(codeReader);
     scannerControlsRef.current = codeReader;
 
@@ -395,6 +400,57 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
     decodeVinAndNotify(candidate);
   }
 
+  // Opens the phone's native camera app (not our live video stream) so the
+  // user gets full native camera features - including flash, which iOS
+  // blocks entirely for web pages using a live getUserMedia stream.
+  async function handlePhotoCapture(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ""; // allow re-selecting the same photo later
+    if (!file) return;
+
+    const previousStatus = status;
+    setIsReadingPhoto(true);
+    setError("");
+    setStatus("Reading photo...");
+
+    const objectUrl = URL.createObjectURL(file);
+    const photoReader = new BrowserMultiFormatReader(createVinDecodeHints());
+
+    try {
+      const result = await photoReader.decodeFromImageUrl(objectUrl);
+      const rawText = result.getText();
+      devLog("Photo barcode detected", { length: rawText ? rawText.length : 0 });
+
+      const candidate = extractVinFromBarcode(rawText);
+      if (!candidate) {
+        setError("No valid 17-character VIN was found in that photo.");
+        setStatus(previousStatus);
+        return;
+      }
+
+      devLog("Photo VIN candidate", candidate);
+
+      if (navigator.vibrate) navigator.vibrate(200);
+      setManualVin(candidate);
+      setStatus(`VIN found: ${candidate}`);
+      await decodeVinAndNotify(candidate);
+    } catch (err) {
+      devLog("Photo decode failed", err);
+      if (isMountedRef.current) {
+        setError("No barcode found in that photo. Try a clearer photo or manual entry.");
+        setStatus(previousStatus);
+      }
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+      try {
+        photoReader.reset();
+      } catch (resetErr) {
+        devLog("Error resetting photo reader", resetErr);
+      }
+      if (isMountedRef.current) setIsReadingPhoto(false);
+    }
+  }
+
   function handleClose() {
     stopScanning();
     onClose();
@@ -446,12 +502,32 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
           <button
             type="button"
             onClick={handleManualScan}
-            disabled={isDecoding}
+            disabled={isDecoding || isReadingPhoto}
             className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Scan
           </button>
         </div>
+
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoCapture}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => photoInputRef.current && photoInputRef.current.click()}
+          disabled={isDecoding || isReadingPhoto}
+          className="mt-2 w-full rounded border border-dashed border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isReadingPhoto ? "Reading photo..." : "📷 Take a Photo of VIN"}
+        </button>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Uses your phone's camera app directly - works with flash in low light.
+        </p>
 
         {isDecoding && <p className="mt-2 text-xs text-slate-500">Decoding vehicle information...</p>}
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
