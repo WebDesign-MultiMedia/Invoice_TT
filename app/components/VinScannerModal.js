@@ -458,7 +458,7 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-4">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-900">Scan VIN</h2>
           <button type="button" onClick={handleClose} className="text-sm text-slate-500">
