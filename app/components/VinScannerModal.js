@@ -552,7 +552,7 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
             <img
               src={capturedPhotoUrl}
               alt="Captured VIN"
-              className="max-h-48 w-full rounded border border-slate-300 object-contain"
+              className="h-auto w-full rounded border border-slate-300"
             />
           </div>
         )}
