@@ -100,6 +100,97 @@ function getResultValue(results, variable) {
   return value && value.trim() !== "" ? value.trim() : null;
 }
 
+// Must match the guide box's on-screen size (see the `style` prop on the
+// guide box below) so the cropped decode region lines up with what the user
+// sees framed on screen.
+const GUIDE_BOX_WIDTH_FRACTION = 0.88;
+const GUIDE_BOX_HEIGHT_FRACTION = 0.26;
+
+// Maps the on-screen guide box back to native video pixel coordinates,
+// replicating the `object-fit: cover` scaling the <video> element uses so
+// the crop lines up with what's actually visible on screen.
+function computeGuideBoxCropRegion(video) {
+  const videoWidth = video.videoWidth;
+  const videoHeight = video.videoHeight;
+  const containerWidth = video.clientWidth;
+  const containerHeight = video.clientHeight;
+
+  if (!videoWidth || !videoHeight || !containerWidth || !containerHeight) {
+    return null; // video metadata not ready yet
+  }
+
+  const scale = Math.max(containerWidth / videoWidth, containerHeight / videoHeight);
+  const displayedWidth = videoWidth * scale;
+  const displayedHeight = videoHeight * scale;
+  const offsetX = (displayedWidth - containerWidth) / 2;
+  const offsetY = (displayedHeight - containerHeight) / 2;
+
+  const leftFraction = (1 - GUIDE_BOX_WIDTH_FRACTION) / 2;
+  const topFraction = (1 - GUIDE_BOX_HEIGHT_FRACTION) / 2;
+
+  const displayedLeft = offsetX + leftFraction * containerWidth;
+  const displayedTop = offsetY + topFraction * containerHeight;
+  const displayedBoxWidth = GUIDE_BOX_WIDTH_FRACTION * containerWidth;
+  const displayedBoxHeight = GUIDE_BOX_HEIGHT_FRACTION * containerHeight;
+
+  let sx = displayedLeft / scale;
+  let sy = displayedTop / scale;
+  let sWidth = displayedBoxWidth / scale;
+  let sHeight = displayedBoxHeight / scale;
+
+  // Clamp defensively in case of rounding at the edges.
+  sx = Math.max(0, Math.min(sx, videoWidth));
+  sy = Math.max(0, Math.min(sy, videoHeight));
+  sWidth = Math.max(1, Math.min(sWidth, videoWidth - sx));
+  sHeight = Math.max(1, Math.min(sHeight, videoHeight - sy));
+
+  return { sx, sy, sWidth, sHeight };
+}
+
+// ZXing's BrowserCodeReader explicitly documents drawFrameOnCanvas as an
+// overridable extension point ("Overwriting this allows you to manipulate
+// the next frame in any way you want before decode"). Overriding it here
+// crops every frame to just the guide box before ZXing analyzes it, instead
+// of scanning the full camera frame - improves both speed and accuracy.
+function installCroppedFrameCapture(codeReader) {
+  codeReader.drawFrameOnCanvas = function (srcElement, dimensions, canvasElementContext) {
+    const ctx = canvasElementContext || this.captureCanvasContext;
+    const crop = computeGuideBoxCropRegion(srcElement);
+
+    if (!crop) {
+      const fallback = dimensions || {
+        sx: 0,
+        sy: 0,
+        sWidth: srcElement.videoWidth,
+        sHeight: srcElement.videoHeight,
+        dx: 0,
+        dy: 0,
+        dWidth: srcElement.videoWidth,
+        dHeight: srcElement.videoHeight,
+      };
+      ctx.drawImage(
+        srcElement,
+        fallback.sx,
+        fallback.sy,
+        fallback.sWidth,
+        fallback.sHeight,
+        fallback.dx,
+        fallback.dy,
+        fallback.dWidth,
+        fallback.dHeight
+      );
+      return;
+    }
+
+    const canvas = this.getCaptureCanvas(srcElement);
+    if (canvas.width !== crop.sWidth || canvas.height !== crop.sHeight) {
+      canvas.width = crop.sWidth;
+      canvas.height = crop.sHeight;
+    }
+    ctx.drawImage(srcElement, crop.sx, crop.sy, crop.sWidth, crop.sHeight, 0, 0, crop.sWidth, crop.sHeight);
+  };
+}
+
 export default function VinScannerModal({ onVehicleFound, onClose }) {
   const videoRef = useRef(null);
   const scannerControlsRef = useRef(null); // holds the active BrowserMultiFormatReader instance
@@ -125,6 +216,7 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
     hints.set(DecodeHintType.TRY_HARDER, true);
 
     const codeReader = new BrowserMultiFormatReader(hints);
+    installCroppedFrameCapture(codeReader);
     scannerControlsRef.current = codeReader;
 
     function handleScanResult(result) {
@@ -321,9 +413,15 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded bg-black">
           <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
 
-          {/* Barcode alignment guide - helps position/size the barcode for a better scan */}
+          {/* Barcode alignment guide - also defines the cropped decode region (see GUIDE_BOX_WIDTH_FRACTION/GUIDE_BOX_HEIGHT_FRACTION) */}
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="relative h-[26%] w-[88%] rounded-md border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+            <div
+              className="relative rounded-md border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+              style={{
+                width: `${GUIDE_BOX_WIDTH_FRACTION * 100}%`,
+                height: `${GUIDE_BOX_HEIGHT_FRACTION * 100}%`,
+              }}
+            >
               <span className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
                 Fill this box with the barcode
               </span>
