@@ -472,7 +472,7 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-4">
+      <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-900">Scan VIN</h2>
           <button type="button" onClick={handleClose} className="text-sm text-slate-500">
@@ -525,20 +525,6 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
           Uses your phone's camera app directly - works with flash in low light.
         </p>
 
-        {capturedPhotoUrl && (
-          <div className="mt-3">
-            <p className="mb-1 text-xs font-medium text-slate-700">
-              Captured photo - read the VIN below if it wasn't found automatically:
-            </p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={capturedPhotoUrl}
-              alt="Captured VIN"
-              className="max-h-48 w-full rounded border border-slate-300 object-contain"
-            />
-          </div>
-        )}
-
         <div className="mt-3 flex gap-2">
           <input
             type="text"
@@ -556,6 +542,20 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
             Scan
           </button>
         </div>
+
+        {capturedPhotoUrl && (
+          <div className="mt-3">
+            <p className="mb-1 text-xs font-medium text-slate-700">
+              Captured photo - read the VIN above if it wasn't found automatically:
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={capturedPhotoUrl}
+              alt="Captured VIN"
+              className="max-h-48 w-full rounded border border-slate-300 object-contain"
+            />
+          </div>
+        )}
 
         {isDecoding && <p className="mt-2 text-xs text-slate-500">Decoding vehicle information...</p>}
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
