@@ -210,11 +210,13 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
   const isProcessingRef = useRef(false); // guards against duplicate decode calls from rapid frames
   const lastScannedVinRef = useRef(null); // last VIN already sent to decodeVin, from camera scanning
   const isMountedRef = useRef(true);
+  const capturedPhotoUrlRef = useRef(null); // tracks the object URL for cleanup/revocation
 
   const [manualVin, setManualVin] = useState("");
   const [status, setStatus] = useState("Requesting camera access...");
   const [isDecoding, setIsDecoding] = useState(false);
   const [isReadingPhoto, setIsReadingPhoto] = useState(false);
+  const [capturedPhotoUrl, setCapturedPhotoUrl] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -297,6 +299,10 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
     return () => {
       isMountedRef.current = false;
       stopScanning();
+      if (capturedPhotoUrlRef.current) {
+        URL.revokeObjectURL(capturedPhotoUrlRef.current);
+        capturedPhotoUrlRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -413,7 +419,16 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
     setError("");
     setStatus("Reading photo...");
 
+    // Keep the captured photo visible (above manual entry) even if the
+    // barcode itself can't be decoded, so the user can read the VIN off the
+    // image by eye and type it in manually.
+    if (capturedPhotoUrlRef.current) {
+      URL.revokeObjectURL(capturedPhotoUrlRef.current);
+    }
     const objectUrl = URL.createObjectURL(file);
+    capturedPhotoUrlRef.current = objectUrl;
+    setCapturedPhotoUrl(objectUrl);
+
     const photoReader = new BrowserMultiFormatReader(createVinDecodeHints());
 
     try {
@@ -423,7 +438,7 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
 
       const candidate = extractVinFromBarcode(rawText);
       if (!candidate) {
-        setError("No valid 17-character VIN was found in that photo.");
+        setError("Couldn't auto-read a VIN from that photo — check the image below and enter it manually.");
         setStatus(previousStatus);
         return;
       }
@@ -437,11 +452,10 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
     } catch (err) {
       devLog("Photo decode failed", err);
       if (isMountedRef.current) {
-        setError("No barcode found in that photo. Try a clearer photo or manual entry.");
+        setError("Couldn't auto-read a VIN from that photo — check the image below and enter it manually.");
         setStatus(previousStatus);
       }
     } finally {
-      URL.revokeObjectURL(objectUrl);
       try {
         photoReader.reset();
       } catch (resetErr) {
@@ -491,6 +505,40 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
         </div>
         <p className="mt-2 text-xs text-slate-500">{status}</p>
 
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoCapture}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => photoInputRef.current && photoInputRef.current.click()}
+          disabled={isDecoding || isReadingPhoto}
+          className="mt-3 w-full rounded border border-dashed border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isReadingPhoto ? "Reading photo..." : "📷 Take a Photo of VIN"}
+        </button>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Uses your phone's camera app directly - works with flash in low light.
+        </p>
+
+        {capturedPhotoUrl && (
+          <div className="mt-3">
+            <p className="mb-1 text-xs font-medium text-slate-700">
+              Captured photo - read the VIN below if it wasn't found automatically:
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={capturedPhotoUrl}
+              alt="Captured VIN"
+              className="max-h-48 w-full rounded border border-slate-300 object-contain"
+            />
+          </div>
+        )}
+
         <div className="mt-3 flex gap-2">
           <input
             type="text"
@@ -508,26 +556,6 @@ export default function VinScannerModal({ onVehicleFound, onClose }) {
             Scan
           </button>
         </div>
-
-        <input
-          ref={photoInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handlePhotoCapture}
-          className="hidden"
-        />
-        <button
-          type="button"
-          onClick={() => photoInputRef.current && photoInputRef.current.click()}
-          disabled={isDecoding || isReadingPhoto}
-          className="mt-2 w-full rounded border border-dashed border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isReadingPhoto ? "Reading photo..." : "📷 Take a Photo of VIN"}
-        </button>
-        <p className="mt-1 text-[11px] text-slate-400">
-          Uses your phone's camera app directly - works with flash in low light.
-        </p>
 
         {isDecoding && <p className="mt-2 text-xs text-slate-500">Decoding vehicle information...</p>}
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
