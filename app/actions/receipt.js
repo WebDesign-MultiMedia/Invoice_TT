@@ -187,9 +187,14 @@ export async function processReceiptAndNotify(receiptData) {
     const id = `RCT-${Date.now()}`;
     const dateCreated = new Date().toISOString();
 
-    const missingCoreVars = ["SHEETDB_API_URL", "RESEND_API_KEY"].filter(
-      (key) => !process.env[key]
-    );
+    if (!clientEmail && !clientPhone) {
+      throw new Error("Provide at least a customer email or phone number to send the receipt.");
+    }
+
+    const missingCoreVars = ["SHEETDB_API_URL"].filter((key) => !process.env[key]);
+    if (clientEmail && !process.env.RESEND_API_KEY) {
+      missingCoreVars.push("RESEND_API_KEY");
+    }
     if (missingCoreVars.length > 0) {
       throw new Error(
         `Missing required environment variable(s) on this deployment: ${missingCoreVars.join(", ")}`
@@ -228,41 +233,45 @@ export async function processReceiptAndNotify(receiptData) {
       throw new Error(`SheetDB logging failed (${sheetResponse.status}): ${errorText}`);
     }
 
-    // --- Step B: Email Dispatch (Resend) ---
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Receipts <receipts@buffetluciasfiestamexicana.com>",
-        to: clientEmail,
-        subject: `Paid Receipt - ${carDetails}`,
-        html: buildReceiptEmailHtml({
-          clientName,
-          carDetails,
-          vin,
-          vehicleDetails,
-          mileage,
-          jobDetails,
-          totalAmount,
-          paymentMethod,
-          id,
-          dateCreated,
-        }),
-      }),
-    });
+    let emailSent = false;
+    let smsSent = false;
 
-    if (!emailResponse.ok) {
-      const errorText = await emailResponse.text();
-      throw new Error(`Email dispatch failed (${emailResponse.status}): ${errorText}`);
+    // --- Step B: Email Dispatch (Resend) ---
+    if (clientEmail) {
+      const emailResponse = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "Receipts <receipts@buffetluciasfiestamexicana.com>",
+          to: clientEmail,
+          subject: `Paid Receipt - ${carDetails}`,
+          html: buildReceiptEmailHtml({
+            clientName,
+            carDetails,
+            vin,
+            vehicleDetails,
+            mileage,
+            jobDetails,
+            totalAmount,
+            paymentMethod,
+            id,
+            dateCreated,
+          }),
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        const errorText = await emailResponse.text();
+        throw new Error(`Email dispatch failed (${emailResponse.status}): ${errorText}`);
+      }
+      emailSent = true;
     }
 
     // --- Step C: SMS Dispatch (Twilio) ---
-    const SMS_ENABLED = true;
-
-    if (SMS_ENABLED) {
+    if (clientPhone) {
       const missingVars = [
         "TWILIO_ACCOUNT_SID",
         "TWILIO_AUTH_TOKEN",
@@ -303,9 +312,10 @@ export async function processReceiptAndNotify(receiptData) {
         const errorText = await smsResponse.text();
         throw new Error(`SMS dispatch failed (${smsResponse.status}): ${errorText}`);
       }
+      smsSent = true;
     }
 
-    return { success: true };
+    return { success: true, emailSent, smsSent };
   } catch (error) {
     return { success: false, error: error.message };
   }

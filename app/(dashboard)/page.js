@@ -91,6 +91,14 @@ export default function Home() {
     e.preventDefault();
     if (isSubmitting) return;
 
+    if (!form.clientEmail && !form.clientPhone) {
+      setResult({
+        success: false,
+        error: "Provide at least a customer email or phone number.",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setResult(null);
 
@@ -172,30 +180,35 @@ export default function Home() {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className={labelClass}>Email</label>
+                  <label className={labelClass}>
+                    Email <span className="font-normal text-slate-500">(optional)</span>
+                  </label>
                   <input
                     type="email"
                     name="clientEmail"
                     value={form.clientEmail}
                     onChange={handleChange}
-                    required
                     placeholder="john@example.com"
                     className={inputClass}
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Phone Number</label>
+                  <label className={labelClass}>
+                    Phone Number <span className="font-normal text-slate-500">(optional)</span>
+                  </label>
                   <input
                     type="tel"
                     name="clientPhone"
                     value={form.clientPhone}
                     onChange={handleChange}
-                    required
                     placeholder="+15555550100"
                     className={inputClass}
                   />
                 </div>
               </div>
+              <p className="-mt-2 text-xs text-slate-500">
+                Provide at least one of email or phone so the receipt has somewhere to go.
+              </p>
 
               <div>
                 <label className={labelClass}>Car Info (Year / Make / Model)</label>
@@ -291,7 +304,12 @@ export default function Home() {
 
               {result?.success && (
                 <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-400">
-                  ✅ Receipt logged and sent — email & text delivered to the customer.
+                  ✅ Receipt logged and sent —{" "}
+                  {result.emailSent && result.smsSent
+                    ? "email & text delivered to the customer."
+                    : result.emailSent
+                    ? "email delivered to the customer."
+                    : "text delivered to the customer."}
                 </div>
               )}
 
