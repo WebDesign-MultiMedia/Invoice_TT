@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { getRecentReceipts } from "../../actions/getReceipts";
 import VehicleSpecsCard from "../../components/VehicleSpecsCard";
 import TextInvoiceModal from "../../components/TextInvoiceModal";
+import { getInvoiceShareUrl } from "../../actions/shareInvoice";
 
 function parseVehicleDetails(raw) {
   if (!raw) return null;
@@ -31,6 +32,16 @@ export default function HistoryPage() {
   const [error, setError] = useState("");
   const [textInvoiceTarget, setTextInvoiceTarget] = useState(null);
   const activeTriggerRef = useRef(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState(null);
+
+  async function handleViewInvoice(invoiceId) {
+    setViewingInvoiceId(invoiceId);
+    const response = await getInvoiceShareUrl(invoiceId);
+    setViewingInvoiceId(null);
+    if (response.success) {
+      window.open(response.url, "_blank", "noopener,noreferrer");
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -128,16 +139,26 @@ export default function HistoryPage() {
 
               <VehicleSpecsCard vehicleDetails={vehicleDetails} />
 
-              <button
-                type="button"
-                onClick={(e) => {
-                  activeTriggerRef.current = e.currentTarget;
-                  setTextInvoiceTarget(receipt);
-                }}
-                className="mt-3 w-full rounded border border-slate-700 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800"
-              >
-                💬 Text Invoice
-              </button>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleViewInvoice(receipt.id)}
+                  disabled={viewingInvoiceId === receipt.id}
+                  className="rounded border border-slate-700 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {viewingInvoiceId === receipt.id ? "Opening..." : "🔗 View Invoice"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    activeTriggerRef.current = e.currentTarget;
+                    setTextInvoiceTarget(receipt);
+                  }}
+                  className="rounded border border-slate-700 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800"
+                >
+                  💬 Text Invoice
+                </button>
+              </div>
             </div>
           );
         })}

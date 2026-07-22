@@ -8,6 +8,7 @@ import {
 } from "../lib/phone";
 import { buildInvoiceSmsMessage } from "../lib/invoiceMessage";
 import { copyTextToClipboard, openManualSmsComposer } from "../lib/manualSms";
+import { getInvoiceShareUrl } from "../actions/shareInvoice";
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -23,18 +24,47 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const phoneErrorId = useId();
-  const statusRegionId = useId();
 
   const [phoneInput, setPhoneInput] = useState(invoice.clientPhone || "");
-  const [message, setMessage] = useState(() =>
-    buildInvoiceSmsMessage(invoice, { name: invoice.clientName, phone: invoice.clientPhone }, {})
-  );
   const [phoneError, setPhoneError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [canShare, setCanShare] = useState(false);
 
+  const [linkStatus, setLinkStatus] = useState("loading"); // loading | ready | error
+  const [shareUrl, setShareUrl] = useState("");
+  const [linkError, setLinkError] = useState("");
+  const [message, setMessage] = useState("");
+  const [messageEdited, setMessageEdited] = useState(false);
+
   useEffect(() => {
     setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
+
+  async function generateLink() {
+    setLinkStatus("loading");
+    setLinkError("");
+    const response = await getInvoiceShareUrl(invoice.id);
+    if (response.success) {
+      setShareUrl(response.url);
+      setLinkStatus("ready");
+      if (!messageEdited) {
+        setMessage(
+          buildInvoiceSmsMessage(
+            { ...invoice, publicUrl: response.url },
+            { name: invoice.clientName, phone: invoice.clientPhone },
+            {}
+          )
+        );
+      }
+    } else {
+      setLinkStatus("error");
+      setLinkError(response.error || "Could not generate the invoice link.");
+    }
+  }
+
+  useEffect(() => {
+    generateLink();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -77,14 +107,24 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
     }
   }
 
-  async function handleCopyMessage() {
+  const linkReady = linkStatus === "ready" && !!shareUrl;
+
+  async function handleCopyInvoiceLink() {
+    if (!linkReady) return;
+    const copied = await copyTextToClipboard(shareUrl);
+    setStatusMessage(copied ? "Invoice link copied." : "Copy the link manually from the field above.");
+  }
+
+  async function handleCopyCompleteMessage() {
+    if (!linkReady) return;
     const copied = await copyTextToClipboard(message);
     setStatusMessage(
-      copied ? "Message copied to clipboard." : "Copy the message manually, then open Messages."
+      copied ? "Complete message copied." : "Copy the message manually, then open Messages."
     );
   }
 
-  async function handleOpenMessages() {
+  async function handleCopyMessageAndOpenMessages() {
+    if (!linkReady) return;
     if (!isValidUSPhoneNumber(phoneInput)) {
       setPhoneError("Enter a valid U.S. phone number (10 digits, or 11 digits starting with 1).");
       return;
@@ -102,12 +142,13 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
     openManualSmsComposer(normalized);
   }
 
-  async function handleShare() {
-    if (!canShare) return;
+  async function handleShareInvoiceLink() {
+    if (!linkReady || !canShare) return;
     try {
       await navigator.share({
         title: invoice.id ? `Invoice ${invoice.id}` : "Invoice",
         text: message,
+        url: shareUrl,
       });
     } catch (err) {
       // User cancelled the share sheet, or sharing failed silently - this is
@@ -169,6 +210,34 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
         </div>
 
         <div className="mb-3">
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Public invoice link
+          </label>
+          {linkStatus === "loading" && (
+            <p className="text-xs text-slate-500">Generating secure invoice link...</p>
+          )}
+          {linkStatus === "error" && (
+            <div>
+              <p role="alert" className="text-xs text-red-600">
+                {linkError}
+              </p>
+              <button
+                type="button"
+                onClick={generateLink}
+                className="mt-1 rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+          {linkReady && (
+            <p className="break-all rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
+              {shareUrl}
+            </p>
+          )}
+        </div>
+
+        <div className="mb-3">
           <label htmlFor="text-invoice-phone" className="mb-1 block text-sm font-medium text-slate-700">
             Customer mobile number
           </label>
@@ -207,39 +276,37 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
           <textarea
             id="text-invoice-message"
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={4}
-            className="w-full resize-none rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            onChange={(e) => {
+              setMessage(e.target.value);
+              setMessageEdited(true);
+            }}
+            disabled={!linkReady}
+            rows={5}
+            className="w-full resize-none rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+            placeholder={linkReady ? "" : "Waiting for the invoice link..."}
           />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div>
-            <button
-              type="button"
-              onClick={handleOpenMessages}
-              className="w-full rounded bg-blue-600 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              Open Messages
-            </button>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Copies the prepared invoice message and opens your Messages app with the
-              customer&apos;s phone number.
-            </p>
-          </div>
+        <p className="mb-3 text-[11px] text-slate-500">
+          On iPhone, a website can&apos;t reliably prefill the Messages text field. For the smoothest
+          experience there, use <strong>Share Invoice Link</strong> below - it hands the message and
+          link directly to Messages via the native share sheet.
+        </p>
 
+        <div className="flex flex-col gap-2">
           {canShare && (
             <div>
               <button
                 type="button"
-                onClick={handleShare}
-                className="w-full rounded border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                onClick={handleShareInvoiceLink}
+                disabled={!linkReady}
+                className="w-full rounded bg-blue-600 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
               >
-                Share Invoice
+                Share Invoice Link
               </button>
               <p className="mt-1 text-[11px] text-slate-500">
                 Opens your device&apos;s share menu so you can choose Messages or another
-                application.
+                application. Recommended on iPhone.
               </p>
             </div>
           )}
@@ -247,14 +314,47 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
           <div>
             <button
               type="button"
-              onClick={handleCopyMessage}
-              className="w-full rounded border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              onClick={handleCopyMessageAndOpenMessages}
+              disabled={!linkReady}
+              className={`w-full rounded py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed ${
+                canShare
+                  ? "border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  : "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300"
+              }`}
             >
-              Copy Message
+              Copy Message &amp; Open Messages
             </button>
             <p className="mt-1 text-[11px] text-slate-500">
-              Copies the complete invoice message without opening another application.
+              Copies the complete invoice message (including the link) and opens your Messages
+              app with the customer&apos;s phone number. Paste and press Send yourself.
             </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <button
+                type="button"
+                onClick={handleCopyInvoiceLink}
+                disabled={!linkReady}
+                className="w-full rounded border border-slate-300 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Copy Invoice Link
+              </button>
+              <p className="mt-1 text-[11px] text-slate-500">Copies only the public invoice URL.</p>
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={handleCopyCompleteMessage}
+                disabled={!linkReady}
+                className="w-full rounded border border-slate-300 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Copy Complete Message
+              </button>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Copies the full message without opening another app.
+              </p>
+            </div>
           </div>
 
           <button
@@ -266,13 +366,14 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
           </button>
         </div>
 
-        <p id={statusRegionId} aria-live="polite" className="mt-3 min-h-[1rem] text-xs text-slate-600">
+        <p aria-live="polite" className="mt-3 min-h-[1rem] text-xs text-slate-600">
           {statusMessage}
         </p>
 
         <p className="mt-2 text-[11px] text-slate-400">
-          This app cannot confirm whether the text was sent - it only opens your Messages app.
-          You must review and press Send yourself.
+          This app cannot confirm whether the text was sent or the link was opened by the
+          customer - it only opens your Messages app or share sheet. You must review and press
+          Send yourself.
         </p>
       </div>
     </div>
