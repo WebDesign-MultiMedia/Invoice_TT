@@ -234,7 +234,6 @@ export async function processReceiptAndNotify(receiptData) {
     }
 
     let emailSent = false;
-    let smsSent = false;
 
     // --- Step B: Email Dispatch (Resend) ---
     if (clientEmail) {
@@ -270,52 +269,10 @@ export async function processReceiptAndNotify(receiptData) {
       emailSent = true;
     }
 
-    // --- Step C: SMS Dispatch (Twilio) ---
-    if (clientPhone) {
-      const missingVars = [
-        "TWILIO_ACCOUNT_SID",
-        "TWILIO_AUTH_TOKEN",
-        "TWILIO_PHONE_NUMBER",
-      ].filter((key) => !process.env[key]);
+    // SMS is sent manually by shop staff via their own Messages app (see the
+    // "Text Invoice" feature) - no automatic SMS dispatch happens here.
 
-      if (missingVars.length > 0) {
-        throw new Error(
-          `Missing required environment variable(s) on this deployment: ${missingVars.join(", ")}`
-        );
-      }
-
-      const smsBody =
-        `Receipt Confirmation: Your ${carDetails} is ready. Total Paid: $${totalAmount} ` +
-        `via ${paymentMethod} for ${jobDetails}. Thank you for choosing our shop!`;
-
-      const twilioAuth = Buffer.from(
-        `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
-      ).toString("base64");
-
-      const smsResponse = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Basic ${twilioAuth}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({
-            To: clientPhone,
-            From: process.env.TWILIO_PHONE_NUMBER,
-            Body: smsBody,
-          }).toString(),
-        }
-      );
-
-      if (!smsResponse.ok) {
-        const errorText = await smsResponse.text();
-        throw new Error(`SMS dispatch failed (${smsResponse.status}): ${errorText}`);
-      }
-      smsSent = true;
-    }
-
-    return { success: true, emailSent, smsSent };
+    return { success: true, emailSent, id, dateCreated };
   } catch (error) {
     return { success: false, error: error.message };
   }

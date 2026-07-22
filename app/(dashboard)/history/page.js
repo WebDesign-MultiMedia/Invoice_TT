@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getRecentReceipts } from "../../actions/getReceipts";
 import VehicleSpecsCard from "../../components/VehicleSpecsCard";
+import TextInvoiceModal from "../../components/TextInvoiceModal";
 
 function parseVehicleDetails(raw) {
   if (!raw) return null;
@@ -28,6 +29,8 @@ export default function HistoryPage() {
   const [receipts, setReceipts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [textInvoiceTarget, setTextInvoiceTarget] = useState(null);
+  const activeTriggerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,10 +127,29 @@ export default function HistoryPage() {
               </div>
 
               <VehicleSpecsCard vehicleDetails={vehicleDetails} />
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  activeTriggerRef.current = e.currentTarget;
+                  setTextInvoiceTarget(receipt);
+                }}
+                className="mt-3 w-full rounded border border-slate-700 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800"
+              >
+                💬 Text Invoice
+              </button>
             </div>
           );
         })}
       </div>
+
+      {textInvoiceTarget && (
+        <TextInvoiceModal
+          invoice={textInvoiceTarget}
+          onClose={() => setTextInvoiceTarget(null)}
+          triggerRef={activeTriggerRef}
+        />
+      )}
     </div>
   );
 }

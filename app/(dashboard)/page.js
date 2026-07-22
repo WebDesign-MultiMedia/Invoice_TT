@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { processReceiptAndNotify } from "../actions/receipt";
 import VinScannerModal from "../components/VinScannerModal";
 import RecentReceiptsPanel from "../components/RecentReceiptsPanel";
 import VehicleSpecsCard from "../components/VehicleSpecsCard";
+import TextInvoiceModal from "../components/TextInvoiceModal";
 
 const DEMO_DATA = {
   clientName: "Jane Smith",
@@ -69,6 +70,9 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [lastInvoice, setLastInvoice] = useState(null);
+  const [isTextModalOpen, setIsTextModalOpen] = useState(false);
+  const textInvoiceTriggerRef = useRef(null);
 
   const todayLabel = new Date().toLocaleDateString("en-US", {
     weekday: "short",
@@ -108,6 +112,7 @@ export default function Home() {
     setIsSubmitting(false);
 
     if (response.success) {
+      setLastInvoice({ ...form, id: response.id, dateCreated: response.dateCreated });
       setForm(EMPTY_FORM);
       setRefreshKey((key) => key + 1);
     }
@@ -304,12 +309,20 @@ export default function Home() {
 
               {result?.success && (
                 <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-400">
-                  ✅ Receipt logged and sent —{" "}
-                  {result.emailSent && result.smsSent
-                    ? "email & text delivered to the customer."
-                    : result.emailSent
-                    ? "email delivered to the customer."
-                    : "text delivered to the customer."}
+                  <p>
+                    ✅ Receipt logged
+                    {result.emailSent ? " and emailed to the customer." : "."}
+                  </p>
+                  {lastInvoice && (
+                    <button
+                      ref={textInvoiceTriggerRef}
+                      type="button"
+                      onClick={() => setIsTextModalOpen(true)}
+                      className="mt-2 w-full rounded-lg bg-slate-900/40 py-2 text-xs font-semibold text-green-300 transition hover:bg-slate-900/60"
+                    >
+                      💬 Text Invoice
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -332,6 +345,14 @@ export default function Home() {
             setIsScannerOpen(false);
           }}
           onClose={() => setIsScannerOpen(false)}
+        />
+      )}
+
+      {isTextModalOpen && lastInvoice && (
+        <TextInvoiceModal
+          invoice={lastInvoice}
+          onClose={() => setIsTextModalOpen(false)}
+          triggerRef={textInvoiceTriggerRef}
         />
       )}
     </div>

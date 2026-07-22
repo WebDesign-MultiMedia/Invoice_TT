@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getRecentReceipts } from "../actions/getReceipts";
+import TextInvoiceModal from "./TextInvoiceModal";
 
 function initials(name) {
   if (!name) return "?";
@@ -19,6 +20,8 @@ export default function RecentReceiptsPanel({ refreshKey }) {
   const [receipts, setReceipts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [textInvoiceTarget, setTextInvoiceTarget] = useState(null);
+  const activeTriggerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,10 +78,20 @@ export default function RecentReceiptsPanel({ refreshKey }) {
                 PAID
               </span>
             </div>
-            <div className="flex items-center justify-between text-xs text-slate-500">
+            <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
               <span>{receipt.paymentMethod}</span>
               <span className="font-semibold text-slate-200">${receipt.totalAmount}</span>
             </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                activeTriggerRef.current = e.currentTarget;
+                setTextInvoiceTarget(receipt);
+              }}
+              className="w-full rounded border border-slate-700 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-800"
+            >
+              💬 Text Invoice
+            </button>
           </div>
         ))}
       </div>
@@ -89,6 +102,14 @@ export default function RecentReceiptsPanel({ refreshKey }) {
       >
         View history
       </Link>
+
+      {textInvoiceTarget && (
+        <TextInvoiceModal
+          invoice={textInvoiceTarget}
+          onClose={() => setTextInvoiceTarget(null)}
+          triggerRef={activeTriggerRef}
+        />
+      )}
     </div>
   );
 }
