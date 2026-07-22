@@ -159,15 +159,15 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
   const invoiceDateLabel = formatInvoiceDate(invoice.dateCreated);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="text-invoice-title"
-        className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-5"
+        className="max-h-[95dvh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-4 sm:max-h-[90dvh] sm:max-w-xl sm:p-5 lg:max-w-2xl"
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-2">
           <h2 id="text-invoice-title" className="text-base font-semibold text-slate-900">
             💬 Text Invoice
           </h2>
@@ -176,13 +176,13 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="rounded px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            className="shrink-0 rounded px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
           >
             Close
           </button>
         </div>
 
-        <div className="mb-4 space-y-1 rounded-lg bg-slate-50 p-3 text-sm">
+        <div className="mb-4 grid grid-cols-1 gap-x-6 gap-y-1 rounded-lg bg-slate-50 p-3 text-sm sm:grid-cols-2">
           <p>
             <span className="text-slate-500">Customer:</span>{" "}
             <span className="font-medium text-slate-900">{invoice.clientName || "—"}</span>
@@ -294,13 +294,28 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
         </p>
 
         <div className="flex flex-col gap-2">
+          <div>
+            <button
+              type="button"
+              onClick={handleCopyMessageAndOpenMessages}
+              disabled={!linkReady}
+              className="w-full rounded bg-blue-600 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+            >
+              Copy Message &amp; Open Messages
+            </button>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Copies the complete invoice message (including the link) and opens your Messages
+              app with the customer&apos;s phone number. Paste and press Send yourself.
+            </p>
+          </div>
+
           {canShare && (
             <div>
               <button
                 type="button"
                 onClick={handleShareInvoiceLink}
                 disabled={!linkReady}
-                className="w-full rounded bg-blue-600 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                className="w-full rounded border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Share Invoice Link
               </button>
@@ -311,26 +326,7 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
             </div>
           )}
 
-          <div>
-            <button
-              type="button"
-              onClick={handleCopyMessageAndOpenMessages}
-              disabled={!linkReady}
-              className={`w-full rounded py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed ${
-                canShare
-                  ? "border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  : "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300"
-              }`}
-            >
-              Copy Message &amp; Open Messages
-            </button>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Copies the complete invoice message (including the link) and opens your Messages
-              app with the customer&apos;s phone number. Paste and press Send yourself.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <button
                 type="button"
