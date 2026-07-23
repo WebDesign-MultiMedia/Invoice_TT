@@ -281,8 +281,7 @@ export default function TextInvoiceModal({ invoice, onClose, triggerRef }) {
               setMessageEdited(true);
             }}
             disabled={!linkReady}
-            rows={5}
-            className="w-full resize-none rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+            className="min-h-[160px] w-full resize-y rounded border border-slate-300 px-3 py-2 text-sm leading-relaxed outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
             placeholder={linkReady ? "" : "Waiting for the invoice link..."}
           />
         </div>
