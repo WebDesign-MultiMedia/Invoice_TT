@@ -6,6 +6,12 @@ import VehicleSpecsCard from "../../components/VehicleSpecsCard";
 import TextInvoiceModal from "../../components/TextInvoiceModal";
 import { getInvoiceShareUrl } from "../../actions/shareInvoice";
 
+const VIEW_MODES = [
+  { id: "list", label: "List" },
+  { id: "grid", label: "Grid" },
+  { id: "detailed", label: "Detailed" },
+];
+
 function parseVehicleDetails(raw) {
   if (!raw) return null;
   try {
@@ -33,6 +39,7 @@ export default function HistoryPage() {
   const [textInvoiceTarget, setTextInvoiceTarget] = useState(null);
   const activeTriggerRef = useRef(null);
   const [viewingInvoiceId, setViewingInvoiceId] = useState(null);
+  const [viewMode, setViewMode] = useState("list");
 
   async function handleViewInvoice(invoiceId) {
     setViewingInvoiceId(invoiceId);
@@ -41,6 +48,11 @@ export default function HistoryPage() {
     if (response.success) {
       window.open(response.url, "_blank", "noopener,noreferrer");
     }
+  }
+
+  function openTextInvoice(receipt, e) {
+    activeTriggerRef.current = e.currentTarget;
+    setTextInvoiceTarget(receipt);
   }
 
   useEffect(() => {
@@ -68,10 +80,26 @@ export default function HistoryPage() {
 
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-lg font-bold text-slate-100">Receipt History</h1>
           <p className="text-sm text-slate-500">All paid receipts logged to SheetDB</p>
+        </div>
+        <div className="grid w-fit grid-cols-3 gap-1 rounded-lg bg-slate-900 p-1">
+          {VIEW_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => setViewMode(mode.id)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                viewMode === mode.id
+                  ? "bg-blue-600 text-white shadow"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {mode.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -99,70 +127,159 @@ export default function HistoryPage() {
         <p className="text-sm text-slate-500">No matching receipts found.</p>
       )}
 
-      <div className="flex flex-col gap-4">
-        {receipts.map((receipt) => {
-          const vehicleDetails = parseVehicleDetails(receipt.vehicleSpecifications);
-          const formattedDate = receipt.dateCreated
-            ? new Date(receipt.dateCreated).toLocaleString()
-            : "";
+      {viewMode === "list" && (
+        <div className="flex flex-col gap-2">
+          {receipts.map((receipt) => {
+            const formattedDate = receipt.dateCreated
+              ? new Date(receipt.dateCreated).toLocaleDateString()
+              : "";
 
-          return (
-            <div
-              key={receipt.id}
-              className="rounded-xl border border-slate-800 bg-slate-800/40 p-4 sm:p-5"
-            >
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-100">{receipt.clientName}</p>
-                  <p className="text-xs text-slate-500">Receipt #{receipt.id}</p>
+            return (
+              <div
+                key={receipt.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-800/40 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-100">{receipt.clientName}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    {receipt.carDetails}
+                    {formattedDate ? ` · ${formattedDate}` : ""}
+                  </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-400">
-                  {receipt.paymentStatus || "PAID"}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  {receipt.totalAmount && (
+                    <span className="text-sm font-semibold text-green-400">${receipt.totalAmount}</span>
+                  )}
+                  <button
+                    type="button"
+                    title="View Invoice"
+                    onClick={() => handleViewInvoice(receipt.id)}
+                    disabled={viewingInvoiceId === receipt.id}
+                    className="rounded p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    🔗
+                  </button>
+                  <button
+                    type="button"
+                    title="Text Invoice"
+                    onClick={(e) => openTextInvoice(receipt, e)}
+                    className="rounded p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+                  >
+                    💬
+                  </button>
+                </div>
               </div>
+            );
+          })}
+        </div>
+      )}
 
-              <div className="mb-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
-                <Field label="Customer Email" value={receipt.clientEmail} />
-                <Field label="Customer Phone" value={receipt.clientPhone} />
-                <Field label="Car Info" value={receipt.carDetails} />
-                <Field label="Car VIN" value={receipt.vin} />
-                <Field label="Car Mileage" value={receipt.mileage} />
-                <Field label="Payment Method" value={receipt.paymentMethod} />
-                <Field label="Total Amount" value={receipt.totalAmount ? `$${receipt.totalAmount}` : ""} />
-                <Field label="Date" value={formattedDate} />
+      {viewMode === "grid" && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {receipts.map((receipt) => {
+            const formattedDate = receipt.dateCreated
+              ? new Date(receipt.dateCreated).toLocaleDateString()
+              : "";
+
+            return (
+              <div
+                key={receipt.id}
+                className="flex flex-col items-center gap-1 rounded-xl border border-slate-800 bg-slate-800/40 p-3 text-center"
+              >
+                <p className="w-full truncate text-xs font-semibold text-slate-100">{receipt.clientName}</p>
+                <p className="w-full truncate text-[11px] text-slate-500">{receipt.carDetails}</p>
+                {receipt.totalAmount && (
+                  <p className="text-sm font-bold text-green-400">${receipt.totalAmount}</p>
+                )}
+                <p className="text-[10px] text-slate-500">{formattedDate}</p>
+                <div className="mt-1 flex gap-2">
+                  <button
+                    type="button"
+                    title="View Invoice"
+                    onClick={() => handleViewInvoice(receipt.id)}
+                    disabled={viewingInvoiceId === receipt.id}
+                    className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    🔗
+                  </button>
+                  <button
+                    type="button"
+                    title="Text Invoice"
+                    onClick={(e) => openTextInvoice(receipt, e)}
+                    className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+                  >
+                    💬
+                  </button>
+                </div>
               </div>
+            );
+          })}
+        </div>
+      )}
 
-              <div className="mb-3 text-xs">
-                <p className="text-slate-500">Job / Service Details:</p>
-                <p className="mt-0.5 text-slate-200">{receipt.jobDetails}</p>
+      {viewMode === "detailed" && (
+        <div className="flex flex-col gap-4">
+          {receipts.map((receipt) => {
+            const vehicleDetails = parseVehicleDetails(receipt.vehicleSpecifications);
+            const formattedDate = receipt.dateCreated
+              ? new Date(receipt.dateCreated).toLocaleString()
+              : "";
+
+            return (
+              <div
+                key={receipt.id}
+                className="rounded-xl border border-slate-800 bg-slate-800/40 p-4 sm:p-5"
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">{receipt.clientName}</p>
+                    <p className="text-xs text-slate-500">Receipt #{receipt.id}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-400">
+                    {receipt.paymentStatus || "PAID"}
+                  </span>
+                </div>
+
+                <div className="mb-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
+                  <Field label="Customer Email" value={receipt.clientEmail} />
+                  <Field label="Customer Phone" value={receipt.clientPhone} />
+                  <Field label="Car Info" value={receipt.carDetails} />
+                  <Field label="Car VIN" value={receipt.vin} />
+                  <Field label="Car Mileage" value={receipt.mileage} />
+                  <Field label="Payment Method" value={receipt.paymentMethod} />
+                  <Field label="Total Amount" value={receipt.totalAmount ? `$${receipt.totalAmount}` : ""} />
+                  <Field label="Date" value={formattedDate} />
+                </div>
+
+                <div className="mb-3 text-xs">
+                  <p className="text-slate-500">Job / Service Details:</p>
+                  <p className="mt-0.5 text-slate-200">{receipt.jobDetails}</p>
+                </div>
+
+                <VehicleSpecsCard vehicleDetails={vehicleDetails} />
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleViewInvoice(receipt.id)}
+                    disabled={viewingInvoiceId === receipt.id}
+                    className="rounded border border-slate-700 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {viewingInvoiceId === receipt.id ? "Opening..." : "🔗 View Invoice"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => openTextInvoice(receipt, e)}
+                    className="rounded border border-slate-700 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800"
+                  >
+                    💬 Text Invoice
+                  </button>
+                </div>
               </div>
-
-              <VehicleSpecsCard vehicleDetails={vehicleDetails} />
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleViewInvoice(receipt.id)}
-                  disabled={viewingInvoiceId === receipt.id}
-                  className="rounded border border-slate-700 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {viewingInvoiceId === receipt.id ? "Opening..." : "🔗 View Invoice"}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    activeTriggerRef.current = e.currentTarget;
-                    setTextInvoiceTarget(receipt);
-                  }}
-                  className="rounded border border-slate-700 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800"
-                >
-                  💬 Text Invoice
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {textInvoiceTarget && (
         <TextInvoiceModal
